@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List
 from datetime import datetime
 from models import EventoResponse, PedidoResponse
-from auth import get_current_user
+from auth import get_current_user, get_current_admin_user
 from database import execute_query
 from routes_pedidos import obter_pedido
 
@@ -311,4 +311,84 @@ async def informar_pagamento(
         "message": "Pagamento informado com sucesso. Aguarde a confirmação do administrador.",
         "pedido_id": pedido_id,
         "novo_status": "AGUARDANDO_CONFIRMACAO"
+    }
+
+
+@router.get("/pendentes")
+async def listar_pagamentos_pendentes(
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """
+    Lista todos os pedidos com status AGUARDANDO_CONFIRMACAO (apenas admin)
+    """
+    
+    query = """
+        SELECT p.id, p.evento_id, e.nome as evento_nome, 
+               u.nome_completo as usuario_nome, u.setor as usuario_setor,
+               p.valor_total, p.valor_frete, p.data_pedido
+        FROM pedidos p
+        JOIN eventos e ON p.evento_id = e.id
+        JOIN usuarios u ON p.usuario_id = u.id
+        WHERE p.status = 'AGUARDANDO_CONFIRMACAO'
+        ORDER BY p.data_pedido DESC
+    """
+    
+    results = execute_query(query)
+    
+    pagamentos = []
+    for row in results:
+        pagamentos.append({
+            "pedido_id": row["ID"],
+            "evento_id": row["EVENTO_ID"],
+            "evento_nome": row["EVENTO_NOME"],
+            "usuario_nome": row["USUARIO_NOME"],
+            "usuario_setor": row["USUARIO_SETOR"],
+            "valor_total": float(row["VALOR_TOTAL"]) + float(row["VALOR_FRETE"]),
+            "data_pedido": row["DATA_PEDIDO"]
+        })
+    
+    return pagamentos
+
+
+@router.put("/evento/{evento_id}/desmarcar-pago/{pedido_id}")
+async def desmarcar_pedido_como_pago(
+    evento_id: int,
+    pedido_id: int,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """
+    Desmarca um pedido como PAGO, voltando para PENDENTE (apenas admin)
+    """
+    
+    # Verificar se pedido existe
+    query = """
+        SELECT id, status FROM pedidos
+        WHERE id = :pedido_id AND evento_id = :evento_id
+    """
+    
+    pedido = execute_query(
+        query,
+        {"pedido_id": pedido_id, "evento_id": evento_id},
+        fetch_one=True
+    )
+    
+    if not pedido:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pedido não encontrado"
+        )
+    
+    # Atualizar status para PENDENTE
+    update_query = """
+        UPDATE pedidos
+        SET status = 'PENDENTE'
+        WHERE id = :pedido_id
+    """
+    
+    execute_query(update_query, {"pedido_id": pedido_id}, commit=True)
+    
+    return {
+        "message": "Pedido desmarcado como PAGO com sucesso (status: PENDENTE)",
+        "pedido_id": pedido_id,
+        "novo_status": "PENDENTE"
     }
