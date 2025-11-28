@@ -255,9 +255,60 @@ async def marcar_pedido_como_pago(
         WHERE id = :pedido_id
     """
     
-    execute_query(update_query, {"pedido_id": pedido_id})
+    execute_query(update_query, {"pedido_id": pedido_id}, commit=True)
     
     return {
         "message": "Pedido marcado como PAGO com sucesso",
         "pedido_id": pedido_id
+    }
+
+
+@router.put("/evento/{evento_id}/informar-pagamento/{pedido_id}")
+async def informar_pagamento(
+    evento_id: int,
+    pedido_id: int,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Usuário informa que realizou o pagamento (muda status para AGUARDANDO_CONFIRMACAO)
+    """
+    
+    # Verificar se pedido existe e pertence ao usuário
+    query = """
+        SELECT id, status FROM pedidos
+        WHERE id = :pedido_id AND evento_id = :evento_id AND usuario_id = :usuario_id
+    """
+    
+    pedido = execute_query(
+        query,
+        {"pedido_id": pedido_id, "evento_id": evento_id, "usuario_id": current_user["id"]},
+        fetch_one=True
+    )
+    
+    if not pedido:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pedido não encontrado"
+        )
+    
+    # Se já estiver pago, não faz nada
+    if pedido[1] == 'PAGO':
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Este pedido já está pago"
+        )
+
+    # Atualizar status para AGUARDANDO_CONFIRMACAO
+    update_query = """
+        UPDATE pedidos
+        SET status = 'AGUARDANDO_CONFIRMACAO'
+        WHERE id = :pedido_id
+    """
+    
+    execute_query(update_query, {"pedido_id": pedido_id}, commit=True)
+    
+    return {
+        "message": "Pagamento informado com sucesso. Aguarde a confirmação do administrador.",
+        "pedido_id": pedido_id,
+        "novo_status": "AGUARDANDO_CONFIRMACAO"
     }

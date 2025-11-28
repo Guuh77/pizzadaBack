@@ -108,7 +108,7 @@ class PedidoResponse(BaseModel):
     itens: List[ItemPedidoResponse]
 
 class PedidoUpdate(BaseModel):
-    status: Optional[str] = Field(None, pattern="^(PENDENTE|CONFIRMADO|PAGO)$")
+    status: Optional[str] = Field(None, pattern="^(PENDENTE|AGUARDANDO_CONFIRMACAO|CONFIRMADO|PAGO)$")
 
 # Modelos de Dashboard
 class EstatisticasPizza(BaseModel):
