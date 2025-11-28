@@ -13,7 +13,7 @@ async def listar_sabores(
 ):
     """Lista todos os sabores de pizza"""
     
-    query = "SELECT id, nome, preco_pedaco, ativo, data_cadastro, tipo FROM sabores_pizza"
+    query = "SELECT id, nome, preco_pedaco, ativo, data_cadastro, tipo, descricao FROM sabores_pizza"
     
     if apenas_ativos:
         query += " WHERE ativo = 1"
@@ -29,7 +29,8 @@ async def listar_sabores(
             preco_pedaco=float(row["PRECO_PEDACO"]),
             ativo=bool(row["ATIVO"]),
             data_cadastro=row["DATA_CADASTRO"],
-            tipo=row.get("TIPO", "SALGADA")
+            tipo=row.get("TIPO", "SALGADA"),
+            descricao=row.get("DESCRICAO")
         )
         for row in results
     ]
@@ -42,7 +43,7 @@ async def obter_sabor(
     """Obtém um sabor específico"""
     
     query = """
-        SELECT id, nome, preco_pedaco, ativo, data_cadastro, tipo
+        SELECT id, nome, preco_pedaco, ativo, data_cadastro, tipo, descricao
         FROM sabores_pizza
         WHERE id = :sabor_id
     """
@@ -61,7 +62,8 @@ async def obter_sabor(
         preco_pedaco=float(result[2]),
         ativo=bool(result[3]),
         data_cadastro=result[4],
-        tipo=result[5] if len(result) > 5 else "SALGADA"
+        tipo=result[5] if len(result) > 5 else "SALGADA",
+        descricao=result[6] if len(result) > 6 else None
     )
 
 @router.post("/", response_model=SaborPizzaResponse, status_code=status.HTTP_201_CREATED)
@@ -82,23 +84,22 @@ async def criar_sabor(
         )
     
     # Inserir sabor
-    # Inserir sabor
     insert_query = """
-        INSERT INTO sabores_pizza (nome, preco_pedaco, tipo)
-        VALUES (:nome, :preco, :tipo)
+        INSERT INTO sabores_pizza (nome, preco_pedaco, tipo, descricao)
+        VALUES (:nome, :preco, :tipo, :descricao)
     """
     
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
             insert_query,
-            {"nome": sabor.nome, "preco": sabor.preco_pedaco, "tipo": sabor.tipo}
+            {"nome": sabor.nome, "preco": sabor.preco_pedaco, "tipo": sabor.tipo, "descricao": sabor.descricao}
         )
         conn.commit()
         
         # Buscar o sabor criado
         select_query = """
-            SELECT id, nome, preco_pedaco, ativo, data_cadastro, tipo
+            SELECT id, nome, preco_pedaco, ativo, data_cadastro, tipo, descricao
             FROM sabores_pizza
             WHERE UPPER(nome) = UPPER(:nome)
         """
@@ -112,7 +113,8 @@ async def criar_sabor(
         preco_pedaco=float(result[2]),
         ativo=bool(result[3]),
         data_cadastro=result[4],
-        tipo=result[5] if len(result) > 5 else "SALGADA"
+        tipo=result[5] if len(result) > 5 else "SALGADA",
+        descricao=result[6] if len(result) > 6 else None
     )
 
 @router.put("/{sabor_id}", response_model=SaborPizzaResponse)
@@ -148,6 +150,10 @@ async def atualizar_sabor(
     if sabor.tipo is not None:
         updates.append("tipo = :tipo")
         params["tipo"] = sabor.tipo
+
+    if sabor.descricao is not None:
+        updates.append("descricao = :descricao")
+        params["descricao"] = sabor.descricao
     
     if sabor.ativo is not None:
         updates.append("ativo = :ativo")
@@ -172,7 +178,7 @@ async def atualizar_sabor(
         
         # Buscar sabor atualizado
         select_query = """
-            SELECT id, nome, preco_pedaco, ativo, data_cadastro, tipo
+            SELECT id, nome, preco_pedaco, ativo, data_cadastro, tipo, descricao
             FROM sabores_pizza
             WHERE id = :sabor_id
         """
@@ -186,7 +192,8 @@ async def atualizar_sabor(
         preco_pedaco=float(result[2]),
         ativo=bool(result[3]),
         data_cadastro=result[4],
-        tipo=result[5] if len(result) > 5 else "SALGADA"
+        tipo=result[5] if len(result) > 5 else "SALGADA",
+        descricao=result[6] if len(result) > 6 else None
     )
 
 @router.delete("/{sabor_id}", status_code=status.HTTP_204_NO_CONTENT)

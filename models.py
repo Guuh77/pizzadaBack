@@ -33,7 +33,6 @@ class Token(BaseModel):
 class SaborPizzaBase(BaseModel):
     nome: str = Field(..., min_length=3, max_length=100)
     preco_pedaco: float = Field(..., gt=0)
-    # CAMPO NOVO ADICIONADO:
     descricao: Optional[str] = Field(None, max_length=500)
     # CAMPO NOVO: Tipo de pizza (SALGADA ou DOCE)
     tipo: str = Field("SALGADA", pattern="^(SALGADA|DOCE)$")
