@@ -211,3 +211,53 @@ async def obter_relatorio_pagamento(
         "chef_esquerda_url": "/static/relatorios/lado_esquerdo.png",
         "chef_direita_url": "/static/relatorios/lado_direito.png"
     }
+
+
+@router.put("/evento/{evento_id}/marcar-pago/{pedido_id}")
+async def marcar_pedido_como_pago(
+    evento_id: int,
+    pedido_id: int,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Marca um pedido como PAGO (apenas admin)
+    """
+    
+    # Verificar se é admin
+    if not current_user.get("is_admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Apenas administradores podem marcar pedidos como pagos"
+        )
+    
+    # Verificar se pedido existe e pertence ao evento
+    query = """
+        SELECT id FROM pedidos
+        WHERE id = :pedido_id AND evento_id = :evento_id
+    """
+    
+    pedido = execute_query(
+        query,
+        {"pedido_id": pedido_id, "evento_id": evento_id},
+        fetch_one=True
+    )
+    
+    if not pedido:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pedido não encontrado"
+        )
+    
+    # Atualizar status para PAGO
+    update_query = """
+        UPDATE pedidos
+        SET status = 'PAGO'
+        WHERE id = :pedido_id
+    """
+    
+    execute_query(update_query, {"pedido_id": pedido_id})
+    
+    return {
+        "message": "Pedido marcado como PAGO com sucesso",
+        "pedido_id": pedido_id
+    }
