@@ -23,7 +23,7 @@ REGRAS_PIZZADA = [
     "NÃO EXISTE PEDAÇO SEM DONO, ENTÃO RETIRE APENAS O SEU PEDAÇO. FIQUEI BEM CHATEADO POIS DAS 2 ÚLTIMAS VEZES, SUMIRAM COM PEDAÇOS DE PIZZA, INCLUSIVE O MEU."
 ]
 
-NOME_RESPONSAVEL = "ROGERIO APARICICIO GOMES ARAUJO SANTOS"
+NOME_RESPONSAVEL = "ROGERIO APARECIDO GOMES ARAUJO SANTOS"
 TAXA_ENTREGA = 1.00
 
 
@@ -298,10 +298,10 @@ async def informar_pagamento(
             detail="Este pedido já está pago"
         )
 
-    # Atualizar status para AGUARDANDO_CONFIRMACAO
+    # Atualizar status para CONFIRMADO (Aguardando Confirmação do Admin)
     update_query = """
         UPDATE pedidos
-        SET status = 'AGUARDANDO_CONFIRMACAO'
+        SET status = 'CONFIRMADO'
         WHERE id = :pedido_id
     """
     
@@ -310,7 +310,7 @@ async def informar_pagamento(
     return {
         "message": "Pagamento informado com sucesso. Aguarde a confirmação do administrador.",
         "pedido_id": pedido_id,
-        "novo_status": "AGUARDANDO_CONFIRMACAO"
+        "novo_status": "CONFIRMADO"
     }
 
 
@@ -319,7 +319,7 @@ async def listar_pagamentos_pendentes(
     current_user: dict = Depends(get_current_admin_user)
 ):
     """
-    Lista todos os pedidos com status AGUARDANDO_CONFIRMACAO (apenas admin)
+    Lista todos os pedidos com status CONFIRMADO (apenas admin)
     """
     
     query = """
@@ -329,7 +329,7 @@ async def listar_pagamentos_pendentes(
         FROM pedidos p
         JOIN eventos e ON p.evento_id = e.id
         JOIN usuarios u ON p.usuario_id = u.id
-        WHERE p.status = 'AGUARDANDO_CONFIRMACAO'
+        WHERE p.status = 'CONFIRMADO'
         ORDER BY p.data_pedido DESC
     """
     
