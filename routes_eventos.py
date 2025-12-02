@@ -252,6 +252,16 @@ async def criar_evento(
         )
         evento_id = cursor.fetchone()[0]
         
+        # Se for evento RELAMPAGO e tiver usuários permitidos, salvar acessos
+        if evento.tipo == 'RELAMPAGO' and evento.allowed_users:
+            insert_acesso = "INSERT INTO evento_acessos (evento_id, usuario_id) VALUES (:evento_id, :usuario_id)"
+            for user_id in evento.allowed_users:
+                # Verificar se usuário existe para evitar erro de FK
+                check_user = "SELECT id FROM usuarios WHERE id = :param_user_id"
+                cursor.execute(check_user, {"param_user_id": user_id})
+                if cursor.fetchone():
+                    cursor.execute(insert_acesso, {"evento_id": evento_id, "usuario_id": user_id})
+        
         conn.commit()
         
         # Buscar evento criado
