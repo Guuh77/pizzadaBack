@@ -4,10 +4,21 @@ from datetime import datetime
 from models import EventoCreate, EventoUpdate, EventoResponse, ResumoEvento
 from auth import get_current_admin_user, get_current_user
 from database import execute_query, get_db_connection
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
 
 router = APIRouter(prefix="/eventos", tags=["Eventos"])
 
 # Helper functions
+def get_now():
+    """
+    Retorna a data/hora atual no fuso horário de São Paulo, 
+    mas sem info de timezone (naive) para comparar com o banco.
+    """
+    return datetime.now(ZoneInfo("America/Sao_Paulo")).replace(tzinfo=None)
+
 def verificar_e_fechar_eventos_expirados():
     """
     Verifica e fecha automaticamente eventos cuja data_limite já passou.
@@ -21,7 +32,7 @@ def verificar_e_fechar_eventos_expirados():
     
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(query, {"current_time": datetime.now()})
+        cursor.execute(query, {"current_time": get_now()})
         rows_updated = cursor.rowcount
         conn.commit()
         cursor.close()
@@ -44,7 +55,7 @@ def verificar_evento_aberto_existente(tipo='NORMAL'):
     
     result = execute_query(
         query, 
-        {"current_time": datetime.now(), "tipo": tipo}, 
+        {"current_time": get_now(), "tipo": tipo}, 
         fetch_one=True
     )
     
@@ -106,7 +117,7 @@ async def listar_eventos_ativos(
         ORDER BY data_evento ASC
     """
     
-    eventos = execute_query(query, {"current_time": datetime.now()})
+    eventos = execute_query(query, {"current_time": get_now()})
     
     return [
         EventoResponse(
@@ -140,7 +151,7 @@ async def obter_evento_ativo(
         FETCH FIRST 1 ROWS ONLY
     """
     
-    result = execute_query(query, {"current_time": datetime.now()}, fetch_one=True)
+    result = execute_query(query, {"current_time": get_now()}, fetch_one=True)
     
     if not result:
         raise HTTPException(
