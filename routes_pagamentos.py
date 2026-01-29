@@ -110,10 +110,16 @@ def calcular_numeros_pizza(evento_id: int, usuario_id: int):
                 pairing_val = config_result[0].read() if config_result[0] and hasattr(config_result[0], 'read') else config_result[0]
                 sector_val = config_result[1].read() if config_result[1] and hasattr(config_result[1], 'read') else config_result[1]
                 
+                print(f"[DEBUG] Raw config from DB: pairing_val={pairing_val}, sector_val={sector_val}")
+                
                 if pairing_val:
                     pairing_overrides = json.loads(pairing_val) if isinstance(pairing_val, str) else {}
                 if sector_val:
                     sector_overrides = json.loads(sector_val) if isinstance(sector_val, str) else {}
+                
+                print(f"[DEBUG] Parsed configs: sector_overrides={sector_overrides}, pairing_overrides={pairing_overrides}")
+            else:
+                print(f"[DEBUG] Nenhuma config encontrada para evento {evento_id}")
             
             cursor.close()
     except Exception as e:
@@ -327,6 +333,20 @@ def calcular_numeros_pizza(evento_id: int, usuario_id: int):
         if p["is_complete"]:
             p["number"] = current_number
             current_number += 1
+    
+    # DEBUG: Mostrar lista completa de pizzas para comparar com dashboard
+    print(f"\n[DEBUG] === LISTA COMPLETA DE PIZZAS (evento {evento_id}) ===")
+    print(f"[DEBUG] Total STI completas: {len([p for p in sti_pizzas if p['is_complete']])}")
+    print(f"[DEBUG] Total SGS completas: {len([p for p in sgs_pizzas if p['is_complete']])}")
+    print(f"[DEBUG] Pizzas STI numeradas:")
+    for p in sti_pizzas:
+        if p.get("number"):
+            print(f"  #{p['number']}: {p['flavor_name']} (STI:{p['sti_count']}, SGS:{p['sgs_count']})")
+    print(f"[DEBUG] Pizzas SGS numeradas:")
+    for p in sgs_pizzas:
+        if p.get("number"):
+            print(f"  #{p['number']}: {p['flavor_name']} (STI:{p['sti_count']}, SGS:{p['sgs_count']})")
+    print(f"[DEBUG] ===============================================\n")
     
     # 12. Mapear item_id -> números de pizza
     resultado = {}
