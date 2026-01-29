@@ -61,16 +61,18 @@ def calcular_numeros_pizza(evento_id: int, usuario_id: int):
     Calcula qual número de pizza cada pedaço do usuário vai cair.
     Retorna um dicionário: {item_pedido_id: [lista de números de pizza]}
     
-    Lógica (sincronizada com Admin em tempo real):
-    - Busca todos os pedidos do evento com sabores e setores
-    - Agrupa pedaços em pizzas (8 pedaços = inteira, 4 = meia)
-    - Aplica sector_overrides e pairing_overrides da tabela pizza_configs
-    - Atribui números globais sequenciais (STI primeiro, depois SGS)
-    - Mapeia qual item de pedido pertence a qual pizza global
+    IMPORTANTE: Esta função replica EXATAMENTE a lógica do AdminPizzaDashboard.jsx
+    - Ordena pedidos por data_pedido (mais antigo primeiro)
+    - Agrupa pedaços em pizzas (8 = inteira, 4 = meia)
+    - lastUpdate = timestamp do ÚLTIMO slice processado (não o max)
+    - STI ordena por lastUpdate DECRESCENTE (mais recente primeiro)
+    - SGS ordena por lastUpdate CRESCENTE (mais antigo primeiro)
+    - Numera STI primeiro, depois SGS
+    - Empates (TIE) não recebem número
     """
     import json
     
-    # 1. Buscar todos os pedidos do evento com sabores, tipos e setores
+    # 1. Buscar todos os pedidos do evento ordenados por data_pedido, id, item_id
     query = """
         SELECT ip.id as item_id, ip.sabor_id, sp.nome as sabor_nome, sp.tipo as sabor_tipo,
                ip.quantidade, p.usuario_id, p.data_pedido, u.setor as usuario_setor
@@ -87,7 +89,7 @@ def calcular_numeros_pizza(evento_id: int, usuario_id: int):
     if not todos_itens:
         return {}
     
-    # 2. Buscar configurações salvas (sector_overrides e pairing_overrides)
+    # 2. Buscar configurações salvas
     sector_overrides = {}
     pairing_overrides = {}
     
@@ -98,29 +100,27 @@ def calcular_numeros_pizza(evento_id: int, usuario_id: int):
     """
     
     from database import get_db_connection
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(config_query, {"evento_id": evento_id})
-        config_result = cursor.fetchone()
-        
-        if config_result:
-            pairing_val = config_result[0].read() if config_result[0] and hasattr(config_result[0], 'read') else config_result[0]
-            sector_val = config_result[1].read() if config_result[1] and hasattr(config_result[1], 'read') else config_result[1]
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(config_query, {"evento_id": evento_id})
+            config_result = cursor.fetchone()
             
-            if pairing_val:
-                pairing_overrides = json.loads(pairing_val) if isinstance(pairing_val, str) else {}
-            if sector_val:
-                sector_overrides = json.loads(sector_val) if isinstance(sector_val, str) else {}
+            if config_result:
+                pairing_val = config_result[0].read() if config_result[0] and hasattr(config_result[0], 'read') else config_result[0]
+                sector_val = config_result[1].read() if config_result[1] and hasattr(config_result[1], 'read') else config_result[1]
+                
+                if pairing_val:
+                    pairing_overrides = json.loads(pairing_val) if isinstance(pairing_val, str) else {}
+                if sector_val:
+                    sector_overrides = json.loads(sector_val) if isinstance(sector_val, str) else {}
             
-            print(f"[DEBUG] Configurações carregadas do evento {evento_id}:")
-            print(f"  sector_overrides: {sector_overrides}")
-            print(f"  pairing_overrides: {pairing_overrides}")
-        else:
-            print(f"[DEBUG] Nenhuma configuração encontrada para evento {evento_id}")
-        
-        cursor.close()
+            cursor.close()
+    except Exception as e:
+        print(f"[DEBUG] Erro ao carregar configurações: {e}")
     
-    # 3. Converter itens em slices individuais (cada pedaço é uma entrada)
+    # 3. Converter itens em slices individuais
+    # IMPORTANTE: Manter a ordem de processamento igual ao frontend (por data_pedido)
     all_slices = []
     for item in todos_itens:
         for i in range(item["QUANTIDADE"]):
@@ -132,25 +132,24 @@ def calcular_numeros_pizza(evento_id: int, usuario_id: int):
                 "usuario_id": item["USUARIO_ID"],
                 "sector": item["USUARIO_SETOR"] or "",
                 "timestamp": item["DATA_PEDIDO"],
-                "slice_index": i  # índice do pedaço dentro do item
             })
     
-    # 4. Agrupar slices por sabor
+    # 4. Agrupar slices por sabor (mantendo ordem de inserção)
     slices_by_flavor = {}
     for slice_data in all_slices:
-        flavor_id = slice_data["flavor_id"]
-        if flavor_id not in slices_by_flavor:
-            slices_by_flavor[flavor_id] = {
-                "id": flavor_id,
+        fid = slice_data["flavor_id"]
+        if fid not in slices_by_flavor:
+            slices_by_flavor[fid] = {
+                "id": fid,
                 "name": slice_data["flavor_name"],
                 "type": slice_data["flavor_type"],
                 "slices": []
             }
-        slices_by_flavor[flavor_id]["slices"].append(slice_data)
+        slices_by_flavor[fid]["slices"].append(slice_data)
     
-    # 5. Função helper para processar grupo de sabores
+    # 5. Processar grupo de sabores (idêntico ao frontend)
     def process_flavor_group(flavors):
-        # Ordenar por popularidade (mais pedaços primeiro)
+        # Ordenar por popularidade (mais pedaços primeiro) - igual ao frontend
         flavors.sort(key=lambda f: len(f["slices"]), reverse=True)
         
         complete_pizzas = []
@@ -158,14 +157,16 @@ def calcular_numeros_pizza(evento_id: int, usuario_id: int):
         leftovers = []
         
         for flavor in flavors:
-            total_slices = len(flavor["slices"])
-            inteiras = total_slices // 8
-            resto = total_slices % 8
+            slices = flavor["slices"]
+            total = len(slices)
+            inteiras = total // 8
+            resto = total % 8
             
-            # Extrair pizzas inteiras
+            # Pizzas inteiras
             for i in range(inteiras):
-                pizza_slices = flavor["slices"][i * 8:(i + 1) * 8]
-                last_ts = max(s["timestamp"] for s in pizza_slices)
+                pizza_slices = slices[i * 8:(i + 1) * 8]
+                # FRONTEND USA: pizzaSlices[pizzaSlices.length - 1].timestamp
+                last_update = pizza_slices[-1]["timestamp"]
                 complete_pizzas.append({
                     "id": f"{flavor['id']}-inteira-{i}",
                     "flavor_name": flavor["name"],
@@ -173,18 +174,18 @@ def calcular_numeros_pizza(evento_id: int, usuario_id: int):
                     "slices_count": 8,
                     "slices": pizza_slices,
                     "is_meio_a_meio": False,
-                    "last_update": last_ts
+                    "last_update": last_update
                 })
             
-            # Extrair meias pizzas
+            # Meias pizzas
             meias = resto // 4
             resto_final = resto % 4
-            base_index = inteiras * 8
+            base_idx = inteiras * 8
             
             for i in range(meias):
-                start = base_index + (i * 4)
-                pizza_slices = flavor["slices"][start:start + 4]
-                last_ts = max(s["timestamp"] for s in pizza_slices)
+                start = base_idx + (i * 4)
+                pizza_slices = slices[start:start + 4]
+                last_update = pizza_slices[-1]["timestamp"]
                 half_pizzas.append({
                     "id": f"{flavor['id']}-meia-{i}",
                     "flavor_id": flavor["id"],
@@ -192,14 +193,14 @@ def calcular_numeros_pizza(evento_id: int, usuario_id: int):
                     "flavor_type": flavor["type"],
                     "slices_count": 4,
                     "slices": pizza_slices,
-                    "last_update": last_ts
+                    "last_update": last_update
                 })
             
-            # Sobras (menos de 4 pedaços)
+            # Sobras
             if resto_final > 0:
-                start = base_index + (meias * 4)
-                pizza_slices = flavor["slices"][start:start + resto_final]
-                last_ts = max(s["timestamp"] for s in pizza_slices)
+                start = base_idx + (meias * 4)
+                pizza_slices = slices[start:start + resto_final]
+                last_update = pizza_slices[-1]["timestamp"]
                 leftovers.append({
                     "id": f"{flavor['id']}-resto",
                     "flavor_name": flavor["name"],
@@ -207,33 +208,33 @@ def calcular_numeros_pizza(evento_id: int, usuario_id: int):
                     "slices_count": resto_final,
                     "slices": pizza_slices,
                     "is_meio_a_meio": False,
-                    "last_update": last_ts
+                    "last_update": last_update
                 })
         
         return complete_pizzas, half_pizzas, leftovers
     
-    # 6. Separar sabores salgados e doces
+    # 6. Separar e processar salgados e doces
     all_flavors = list(slices_by_flavor.values())
     salgada_flavors = [f for f in all_flavors if f["type"] != "DOCE"]
     doce_flavors = [f for f in all_flavors if f["type"] == "DOCE"]
     
-    # Processar cada grupo
     salgada_complete, salgada_halves, salgada_leftovers = process_flavor_group(salgada_flavors)
     doce_complete, doce_halves, doce_leftovers = process_flavor_group(doce_flavors)
     
     all_halves = salgada_halves + doce_halves
     
-    # 7. Aplicar pairing_overrides e auto-parear meias pizzas
+    # 7. Parear meias pizzas
     paired_set = set()
     paired_halves = []
     unpaired_halves = []
     
-    # Primeiro aplicar pareamentos customizados
-    for half_id1, half_id2 in pairing_overrides.items():
-        h1 = next((h for h in all_halves if h["id"] == half_id1), None)
-        h2 = next((h for h in all_halves if h["id"] == half_id2), None)
-        if h1 and h2 and half_id1 not in paired_set and half_id2 not in paired_set:
-            combined_slices = h1["slices"] + h2["slices"]
+    # Pareamentos customizados primeiro
+    for h1_id, h2_id in pairing_overrides.items():
+        h1 = next((h for h in all_halves if h["id"] == h1_id), None)
+        h2 = next((h for h in all_halves if h["id"] == h2_id), None)
+        if h1 and h2 and h1_id not in paired_set and h2_id not in paired_set:
+            combined = h1["slices"] + h2["slices"]
+            # Frontend usa: new Date(h1.lastUpdate) > new Date(h2.lastUpdate) ? h1.lastUpdate : h2.lastUpdate
             last_update = max(h1["last_update"], h2["last_update"])
             paired_halves.append({
                 "id": f"combined-{h1['id']}-{h2['id']}",
@@ -244,18 +245,18 @@ def calcular_numeros_pizza(evento_id: int, usuario_id: int):
                 "half2_id": h2["id"],
                 "is_meio_a_meio": True,
                 "slices_count": 8,
-                "slices": combined_slices,
+                "slices": combined,
                 "last_update": last_update
             })
-            paired_set.add(half_id1)
-            paired_set.add(half_id2)
+            paired_set.add(h1_id)
+            paired_set.add(h2_id)
     
-    # Auto-parear restantes (mesmo tipo)
+    # Auto-parear restantes por tipo
     def auto_pair(halves):
         for i in range(0, len(halves), 2):
             if i + 1 < len(halves):
                 h1, h2 = halves[i], halves[i + 1]
-                combined_slices = h1["slices"] + h2["slices"]
+                combined = h1["slices"] + h2["slices"]
                 last_update = max(h1["last_update"], h2["last_update"])
                 paired_halves.append({
                     "id": f"combined-{h1['id']}-{h2['id']}",
@@ -264,7 +265,7 @@ def calcular_numeros_pizza(evento_id: int, usuario_id: int):
                     "flavor_type2": h2["flavor_type"],
                     "is_meio_a_meio": True,
                     "slices_count": 8,
-                    "slices": combined_slices,
+                    "slices": combined,
                     "last_update": last_update
                 })
             else:
@@ -275,7 +276,7 @@ def calcular_numeros_pizza(evento_id: int, usuario_id: int):
     auto_pair(salgada_unpaired)
     auto_pair(doce_unpaired)
     
-    # 8. Combinar todas as pizzas
+    # 8. Combinar todas as pizzas (mesma ordem do frontend)
     final_pizzas = (
         salgada_complete + doce_complete +
         paired_halves +
@@ -283,99 +284,62 @@ def calcular_numeros_pizza(evento_id: int, usuario_id: int):
         salgada_leftovers + doce_leftovers
     )
     
-    # 9. Aplicar lógica STI/SGS e sector_overrides
+    # 9. Calcular winner (STI/SGS/TIE) e aplicar overrides
     for pizza in final_pizzas:
-        sti_count = 0
-        sgs_count = 0
-        
-        for s in pizza["slices"]:
-            sec = (s.get("sector") or "").upper()
-            if "STI" in sec:
-                sti_count += 1
-            elif "SGS" in sec:
-                sgs_count += 1
+        sti = sum(1 for s in pizza["slices"] if "STI" in (s.get("sector") or "").upper())
+        sgs = sum(1 for s in pizza["slices"] if "SGS" in (s.get("sector") or "").upper())
         
         winner = "TIE"
-        if sti_count > sgs_count:
+        if sti > sgs:
             winner = "STI"
-        elif sgs_count > sti_count:
+        elif sgs > sti:
             winner = "SGS"
         
-        # Aplicar override se existir
+        # Aplicar override
         if pizza["id"] in sector_overrides:
             winner = sector_overrides[pizza["id"]]
         
-        pizza["sti_count"] = sti_count
-        pizza["sgs_count"] = sgs_count
+        pizza["sti_count"] = sti
+        pizza["sgs_count"] = sgs
         pizza["winner"] = winner
         pizza["is_complete"] = pizza["slices_count"] == 8
     
-    # 10. Separar por vencedor e ordenar
+    # 10. Separar e ordenar
+    # FRONTEND: stiPizzas sort(b.lastUpdate - a.lastUpdate) = DECRESCENTE
+    # FRONTEND: sgsPizzas sort(a.lastUpdate - b.lastUpdate) = CRESCENTE
     sti_pizzas = sorted(
         [p for p in final_pizzas if p["winner"] == "STI"],
         key=lambda p: p["last_update"],
-        reverse=True
+        reverse=True  # Mais recente primeiro
     )
     sgs_pizzas = sorted(
         [p for p in final_pizzas if p["winner"] == "SGS"],
-        key=lambda p: p["last_update"]
+        key=lambda p: p["last_update"]  # Mais antigo primeiro
     )
-    tie_pizzas = [p for p in final_pizzas if p["winner"] == "TIE"]
     
-    # DEBUG: Mostrar ordem das pizzas após ordenação
-    print(f"\n[DEBUG] === ORDEM DAS PIZZAS PARA EVENTO {evento_id} ===")
-    print(f"[DEBUG] STI pizzas (reverse=True, mais recente primeiro):")
-    for i, p in enumerate(sti_pizzas):
-        if p["slices_count"] == 8:
-            print(f"  {i+1}. {p['flavor_name']} (last_update={p['last_update']})")
-    print(f"[DEBUG] SGS pizzas (sem reverse, mais antigo primeiro):")
-    for i, p in enumerate(sgs_pizzas):
-        if p["slices_count"] == 8:
-            print(f"  {i+1}. {p['flavor_name']} (last_update={p['last_update']})")
-    print(f"[DEBUG] TIE pizzas (sem número):")
-    for i, p in enumerate(tie_pizzas):
-        print(f"  {i+1}. {p['flavor_name']} (STI:{p.get('sti_count',0)}, SGS:{p.get('sgs_count',0)})")
-    print(f"[DEBUG] ===============================================\n")
-    
-    # 11. Atribuir números globais (apenas pizzas completas)
+    # 11. Numerar (STI primeiro, depois SGS) - apenas completas
     current_number = 1
-    
     for p in sti_pizzas:
         if p["is_complete"]:
             p["number"] = current_number
             current_number += 1
-    
     for p in sgs_pizzas:
         if p["is_complete"]:
             p["number"] = current_number
             current_number += 1
     
-    # DEBUG: Mostrar todas as pizzas numeradas
-    print(f"\n[DEBUG] === PIZZAS NUMERADAS PARA EVENTO {evento_id} ===")
-    for p in sti_pizzas + sgs_pizzas:
-        if p.get("number"):
-            users_in_pizza = list(set(s.get("usuario_id") for s in p["slices"]))
-            print(f"  Pizza #{p['number']}: {p['flavor_name']} (winner={p['winner']}, usuarios={users_in_pizza})")
-    print(f"[DEBUG] ===============================================\n")
-    
-    # 12. Construir mapeamento: item_id -> [números de pizza]
+    # 12. Mapear item_id -> números de pizza
     resultado = {}
-    
-    all_numbered_pizzas = sti_pizzas + sgs_pizzas + tie_pizzas
-    
-    for pizza in all_numbered_pizzas:
-        pizza_num = pizza.get("number")
-        if not pizza_num:
-            continue  # Pizzas incompletas não têm número
-        
+    for pizza in sti_pizzas + sgs_pizzas:
+        num = pizza.get("number")
+        if not num:
+            continue
         for slice_data in pizza["slices"]:
             if slice_data["usuario_id"] == usuario_id:
                 item_id = slice_data["item_id"]
                 if item_id not in resultado:
                     resultado[item_id] = []
-                resultado[item_id].append(pizza_num)
-    
-    print(f"[DEBUG] Mapeamento para usuario {usuario_id}: {resultado}")
+                resultado[item_id].append(num)
     
     return resultado
 
