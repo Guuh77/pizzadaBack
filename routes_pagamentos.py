@@ -155,8 +155,9 @@ def calcular_numeros_pizza(evento_id: int, usuario_id: int):
     
     # 5. Processar grupo de sabores (idêntico ao frontend)
     def process_flavor_group(flavors):
-        # Ordenar por popularidade (mais pedaços primeiro) - igual ao frontend
-        flavors.sort(key=lambda f: len(f["slices"]), reverse=True)
+        # Ordenar por popularidade (mais pedaços primeiro), com ID como desempate para garantir ordem determinística
+        # IMPORTANTE: Isso garante que frontend e backend gerem os mesmos IDs de pizza
+        flavors.sort(key=lambda f: (-len(f["slices"]), f["id"]))
         
         complete_pizzas = []
         half_pizzas = []
