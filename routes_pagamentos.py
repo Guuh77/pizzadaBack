@@ -335,6 +335,14 @@ def calcular_numeros_pizza(evento_id: int, usuario_id: int):
             p["number"] = current_number
             current_number += 1
     
+    # DEBUG: Mostrar todas as pizzas numeradas
+    print(f"\n[DEBUG] === PIZZAS NUMERADAS PARA EVENTO {evento_id} ===")
+    for p in sti_pizzas + sgs_pizzas:
+        if p.get("number"):
+            users_in_pizza = list(set(s.get("usuario_id") for s in p["slices"]))
+            print(f"  Pizza #{p['number']}: {p['flavor_name']} (winner={p['winner']}, usuarios={users_in_pizza})")
+    print(f"[DEBUG] ===============================================\n")
+    
     # 12. Construir mapeamento: item_id -> [números de pizza]
     resultado = {}
     
@@ -351,6 +359,8 @@ def calcular_numeros_pizza(evento_id: int, usuario_id: int):
                 if item_id not in resultado:
                     resultado[item_id] = []
                 resultado[item_id].append(pizza_num)
+    
+    print(f"[DEBUG] Mapeamento para usuario {usuario_id}: {resultado}")
     
     return resultado
 
