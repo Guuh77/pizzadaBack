@@ -322,6 +322,21 @@ def calcular_numeros_pizza(evento_id: int, usuario_id: int):
     )
     tie_pizzas = [p for p in final_pizzas if p["winner"] == "TIE"]
     
+    # DEBUG: Mostrar ordem das pizzas após ordenação
+    print(f"\n[DEBUG] === ORDEM DAS PIZZAS PARA EVENTO {evento_id} ===")
+    print(f"[DEBUG] STI pizzas (reverse=True, mais recente primeiro):")
+    for i, p in enumerate(sti_pizzas):
+        if p["slices_count"] == 8:
+            print(f"  {i+1}. {p['flavor_name']} (last_update={p['last_update']})")
+    print(f"[DEBUG] SGS pizzas (sem reverse, mais antigo primeiro):")
+    for i, p in enumerate(sgs_pizzas):
+        if p["slices_count"] == 8:
+            print(f"  {i+1}. {p['flavor_name']} (last_update={p['last_update']})")
+    print(f"[DEBUG] TIE pizzas (sem número):")
+    for i, p in enumerate(tie_pizzas):
+        print(f"  {i+1}. {p['flavor_name']} (STI:{p.get('sti_count',0)}, SGS:{p.get('sgs_count',0)})")
+    print(f"[DEBUG] ===============================================\n")
+    
     # 11. Atribuir números globais (apenas pizzas completas)
     current_number = 1
     
