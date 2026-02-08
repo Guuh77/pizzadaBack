@@ -9,3 +9,4 @@ pydantic-settings==2.1.0
 python-dotenv==1.0.0
 resend
 backports.zoneinfo;python_version<"3.9"
+tzdata

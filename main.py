@@ -8,6 +8,7 @@ from routes_pedidos import router as pedidos_router
 from routes_dashboard import router as dashboard_router
 from routes_pagamentos import router as pagamentos_router
 from routes_pizza_config import router as pizza_config_router
+from routes_votacoes import router as votacoes_router
 
 app = FastAPI(
     title="PIZZADA DO LELO API",
@@ -32,6 +33,7 @@ app.include_router(pedidos_router)
 app.include_router(dashboard_router)
 app.include_router(pagamentos_router)
 app.include_router(pizza_config_router)
+app.include_router(votacoes_router)
 
 # Servir arquivos estáticos
 app.mount("/static", StaticFiles(directory="static"), name="static")

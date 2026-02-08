@@ -149,3 +149,77 @@ class ResetPasswordRequest(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+# ===== MODELOS DE VOTAÇÃO =====
+
+class EscolhaCreate(BaseModel):
+    texto: str = Field(..., min_length=1, max_length=200)
+
+class EscolhaResponse(BaseModel):
+    id: int
+    texto: str
+    ordem: int
+
+class EscolhaResultado(BaseModel):
+    id: int
+    texto: str
+    ordem: int
+    votos: int
+    porcentagem: float
+
+class VotacaoBase(BaseModel):
+    titulo: str = Field(..., min_length=3, max_length=200)
+    data_abertura: datetime
+    data_limite: datetime
+    data_resultado_ate: datetime
+
+class VotacaoCreate(VotacaoBase):
+    escolhas: List[EscolhaCreate] = Field(..., min_items=2, max_items=4)
+
+class VotacaoUpdate(BaseModel):
+    titulo: Optional[str] = Field(None, min_length=3, max_length=200)
+    data_limite: Optional[datetime] = None
+    data_resultado_ate: Optional[datetime] = None
+    status: Optional[str] = Field(None, pattern="^(ABERTO|FECHADO|FINALIZADO)$")
+
+class VotacaoResponse(VotacaoBase):
+    id: int
+    status: str
+    criado_por: int
+    data_criacao: Optional[datetime] = None
+    escolhas: List[EscolhaResponse]
+
+class VotoCreate(BaseModel):
+    escolha_id: int
+
+class VotacaoResultado(VotacaoBase):
+    """Resultado da votação com porcentagens (para usuários que já votaram)"""
+    id: int
+    status: str
+    total_votos: int
+    escolhas: List[EscolhaResultado]
+    usuario_votou: bool
+    escolha_usuario: Optional[int] = None
+
+class VotanteInfo(BaseModel):
+    usuario_id: int
+    nome: str
+    setor: str
+    data_voto: Optional[datetime] = None
+
+class EscolhaAdminDetalhe(BaseModel):
+    id: int
+    texto: str
+    ordem: int
+    votos: int
+    votantes: List[VotanteInfo]
+
+class VotacaoAdminDetalhe(VotacaoBase):
+    """Detalhes completos para o admin ver quem votou em quê"""
+    id: int
+    status: str
+    criado_por: int
+    data_criacao: Optional[datetime] = None
+    total_votos: int
+    escolhas: List[EscolhaAdminDetalhe]

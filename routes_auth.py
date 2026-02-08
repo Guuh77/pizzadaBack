@@ -175,6 +175,46 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         data_cadastro=current_user["data_cadastro"]
     )
 
+
+@router.put("/me", response_model=UsuarioResponse)
+async def update_me(
+    data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Atualiza dados do usuário logado (apenas nome por enquanto)"""
+    nome_completo = data.get("nome_completo")
+    
+    if not nome_completo or len(nome_completo.strip()) < 3:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nome deve ter pelo menos 3 caracteres"
+        )
+    
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE usuarios SET nome_completo = :nome WHERE id = :id",
+            {"nome": nome_completo.strip(), "id": current_user["id"]}
+        )
+        conn.commit()
+        
+        cursor.execute("""
+            SELECT id, nome_completo, email, setor, is_admin, ativo, data_cadastro
+            FROM usuarios WHERE id = :id
+        """, {"id": current_user["id"]})
+        row = cursor.fetchone()
+        cursor.close()
+    
+    return UsuarioResponse(
+        id=row[0],
+        nome_completo=row[1],
+        email=row[2],
+        setor=row[3],
+        is_admin=bool(row[4]),
+        ativo=bool(row[5]),
+        data_cadastro=row[6]
+    )
+
 @router.post("/forgot-password", response_model=MessageResponse)
 async def forgot_password(request: ForgotPasswordRequest):
     query = "SELECT id FROM usuarios WHERE email = :email AND ativo = 1"
