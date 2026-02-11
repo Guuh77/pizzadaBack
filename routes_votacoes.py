@@ -462,17 +462,25 @@ async def votar(
     voto_existente = execute_query(voto_existente_query, {"votacao_id": votacao_id, "user_id": user_id}, fetch_one=True)
     
     if voto_existente:
-        raise HTTPException(status_code=400, detail="Você já votou nesta votação")
-    
-    # Registrar voto
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO votos (escolha_id, usuario_id) VALUES (:escolha_id, :user_id)",
-            {"escolha_id": voto.escolha_id, "user_id": user_id}
-        )
-        conn.commit()
-        cursor.close()
+        # Atualizar voto existente (usuário está alterando seu voto)
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE votos SET escolha_id = :escolha_id, data_voto = CURRENT_TIMESTAMP WHERE id = :voto_id",
+                {"escolha_id": voto.escolha_id, "voto_id": voto_existente[0]}
+            )
+            conn.commit()
+            cursor.close()
+    else:
+        # Registrar novo voto
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO votos (escolha_id, usuario_id) VALUES (:escolha_id, :user_id)",
+                {"escolha_id": voto.escolha_id, "user_id": user_id}
+            )
+            conn.commit()
+            cursor.close()
     
     # Retornar resultado completo
     votacao_full = execute_query("""
