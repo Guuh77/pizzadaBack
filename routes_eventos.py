@@ -44,7 +44,7 @@ def verificar_evento_aberto_existente(tipo='NORMAL'):
     Verifica se já existe um evento aberto do tipo especificado.
     """
     query = """
-        SELECT id, data_evento, status, data_limite, data_criacao, tipo
+        SELECT id, data_evento, status, data_limite, data_criacao, tipo, pagamento_liberado
         FROM eventos
         WHERE status = 'ABERTO' 
         AND data_limite > :current_time
@@ -66,7 +66,8 @@ def verificar_evento_aberto_existente(tipo='NORMAL'):
             status=result[2],
             data_limite=result[3],
             data_criacao=result[4],
-            tipo=result[5]
+            tipo=result[5],
+            pagamento_liberado=bool(result[6]) if len(result) > 6 else False
         )
     
     return None
@@ -80,7 +81,7 @@ async def listar_eventos(
     
     # Incluindo 'tipo' na query
     query = """
-        SELECT id, nome, data_evento, status, data_limite, data_criacao, tipo
+        SELECT id, nome, data_evento, status, data_limite, data_criacao, tipo, pagamento_liberado
         FROM eventos
         ORDER BY data_evento DESC
     """
@@ -95,7 +96,8 @@ async def listar_eventos(
             status=evt["STATUS"],
             data_limite=evt["DATA_LIMITE"],
             data_criacao=evt.get("DATA_CRIACAO"),
-            tipo=evt.get("TIPO", "NORMAL")
+            tipo=evt.get("TIPO", "NORMAL"),
+            pagamento_liberado=bool(evt.get("PAGAMENTO_LIBERADO", 0))
         )
         for evt in eventos
     ]
@@ -111,7 +113,7 @@ async def listar_eventos_ativos(
     
     # Buscar eventos abertos
     query = """
-        SELECT id, nome, data_evento, status, data_limite, data_criacao, tipo
+        SELECT id, nome, data_evento, status, data_limite, data_criacao, tipo, pagamento_liberado
         FROM eventos
         WHERE status = 'ABERTO' AND data_limite > :current_time
         ORDER BY data_evento ASC
@@ -127,7 +129,8 @@ async def listar_eventos_ativos(
             status=evt["STATUS"],
             data_limite=evt["DATA_LIMITE"],
             data_criacao=evt.get("DATA_CRIACAO"),
-            tipo=evt.get("TIPO", "NORMAL")
+            tipo=evt.get("TIPO", "NORMAL"),
+            pagamento_liberado=bool(evt.get("PAGAMENTO_LIBERADO", 0))
         )
         for evt in eventos
     ]
@@ -143,7 +146,7 @@ async def obter_evento_ativo(
     
     # Query com 'tipo'
     query = """
-        SELECT id, data_evento, status, data_limite, data_criacao, tipo
+        SELECT id, data_evento, status, data_limite, data_criacao, tipo, pagamento_liberado
         FROM eventos
         WHERE status = 'ABERTO' 
         AND data_limite > :current_time
@@ -165,7 +168,8 @@ async def obter_evento_ativo(
         status=result[2],
         data_limite=result[3],
         data_criacao=result[4],
-        tipo=result[5]
+        tipo=result[5],
+        pagamento_liberado=bool(result[6]) if len(result) > 6 else False
     )
 
 @router.get("/{evento_id}", response_model=EventoResponse)
@@ -176,7 +180,7 @@ async def obter_evento(
     """Obtém um evento específico"""
     
     query = """
-        SELECT id, data_evento, status, data_limite, data_criacao, tipo
+        SELECT id, data_evento, status, data_limite, data_criacao, tipo, pagamento_liberado
         FROM eventos
         WHERE id = :evento_id
     """
@@ -195,7 +199,8 @@ async def obter_evento(
         status=result[2],
         data_limite=result[3],
         data_criacao=result[4],
-        tipo=result[5]
+        tipo=result[5],
+        pagamento_liberado=bool(result[6]) if len(result) > 6 else False
     )
 
 class EventoCreateRequest(EventoCreate):
@@ -266,7 +271,7 @@ async def criar_evento(
         
         # Buscar evento criado
         select_query = """
-            SELECT id, nome, data_evento, status, data_limite, data_criacao, tipo
+            SELECT id, nome, data_evento, status, data_limite, data_criacao, tipo, pagamento_liberado
             FROM eventos
             WHERE id = :evento_id
         """
@@ -281,7 +286,8 @@ async def criar_evento(
         status=result[3],
         data_limite=result[4],
         data_criacao=result[5],
-        tipo=result[6]
+        tipo=result[6],
+        pagamento_liberado=bool(result[7]) if len(result) > 7 else False
     )
 
 @router.put("/{evento_id}", response_model=EventoResponse)
@@ -338,6 +344,10 @@ async def atualizar_evento(
     if evento.tipo is not None:
         updates.append("tipo = :tipo")
         params["tipo"] = evento.tipo
+
+    if evento.pagamento_liberado is not None:
+        updates.append("pagamento_liberado = :pagamento_liberado")
+        params["pagamento_liberado"] = 1 if evento.pagamento_liberado else 0
     
     if not updates:
         raise HTTPException(
@@ -358,7 +368,7 @@ async def atualizar_evento(
         
         # Buscar evento atualizado
         select_query = """
-            SELECT id, data_evento, status, data_limite, data_criacao, tipo
+            SELECT id, data_evento, status, data_limite, data_criacao, tipo, pagamento_liberado
             FROM eventos
             WHERE id = :evento_id
         """
@@ -372,7 +382,8 @@ async def atualizar_evento(
         status=result[2],
         data_limite=result[3],
         data_criacao=result[4],
-        tipo=result[5]
+        tipo=result[5],
+        pagamento_liberado=bool(result[6]) if len(result) > 6 else False
     )
 
 @router.get("/{evento_id}/resumo", response_model=ResumoEvento)
@@ -384,7 +395,7 @@ async def obter_resumo_evento(
     
     # Buscar dados do evento
     evento_query = """
-        SELECT id, data_evento, status, data_limite, data_criacao, tipo
+        SELECT id, data_evento, status, data_limite, data_criacao, tipo, pagamento_liberado
         FROM eventos
         WHERE id = :evento_id
     """
@@ -422,7 +433,8 @@ async def obter_resumo_evento(
             status=evento_result[2],
             data_limite=evento_result[3],
             data_criacao=evento_result[4],
-            tipo=evento_result[5]
+            tipo=evento_result[5],
+            pagamento_liberado=bool(evento_result[6]) if len(evento_result) > 6 else False
         ),
         total_participantes=total_participantes,
         total_pedidos=total_pedidos,
@@ -465,3 +477,52 @@ async def deletar_evento(
         cursor.close()
     
     return None
+
+
+@router.put("/{evento_id}/toggle-pagamento", response_model=EventoResponse)
+async def toggle_pagamento_evento(
+    evento_id: int,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Libera ou bloqueia pagamentos de um evento (apenas admin)"""
+    
+    # Buscar estado atual
+    check_query = "SELECT pagamento_liberado FROM eventos WHERE id = :evento_id"
+    result = execute_query(check_query, {"evento_id": evento_id}, fetch_one=True)
+    
+    if not result:
+        from fastapi import HTTPException, status as http_status
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Evento não encontrado"
+        )
+    
+    # Inverter valor
+    novo_valor = 0 if result[0] else 1
+    
+    update_query = "UPDATE eventos SET pagamento_liberado = :valor WHERE id = :evento_id"
+    
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(update_query, {"valor": novo_valor, "evento_id": evento_id})
+        conn.commit()
+        
+        # Buscar evento atualizado
+        select_query = """
+            SELECT id, data_evento, status, data_limite, data_criacao, tipo, pagamento_liberado
+            FROM eventos
+            WHERE id = :evento_id
+        """
+        cursor.execute(select_query, {"evento_id": evento_id})
+        evt = cursor.fetchone()
+        cursor.close()
+    
+    return EventoResponse(
+        id=evt[0],
+        data_evento=evt[1],
+        status=evt[2],
+        data_limite=evt[3],
+        data_criacao=evt[4],
+        tipo=evt[5],
+        pagamento_liberado=bool(evt[6]) if len(evt) > 6 else False
+    )

@@ -10,6 +10,37 @@ from routes_pagamentos import router as pagamentos_router
 from routes_pizza_config import router as pizza_config_router
 from routes_votacoes import router as votacoes_router
 from routes_feedbacks import router as feedbacks_router
+from database import get_db_connection
+
+
+def run_migrations():
+    """Executa migrações automáticas no startup (idempotente)"""
+    migrations = [
+        # Adicionar coluna pagamento_liberado à tabela eventos
+        "ALTER TABLE eventos ADD (pagamento_liberado NUMBER(1) DEFAULT 0)",
+    ]
+    
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            for sql in migrations:
+                try:
+                    cursor.execute(sql)
+                    conn.commit()
+                    print(f"[MIGRATION] OK: {sql[:60]}...")
+                except Exception as e:
+                    # ORA-01430: column already exists — ignorar
+                    if "01430" in str(e) or "already exists" in str(e).lower():
+                        pass
+                    else:
+                        print(f"[MIGRATION] Erro (ignorado): {e}")
+            cursor.close()
+    except Exception as e:
+        print(f"[MIGRATION] Erro de conexão (ignorado): {e}")
+
+
+# Executar migrações no startup
+run_migrations()
 
 app = FastAPI(
     title="PIZZADA DO LELO API",

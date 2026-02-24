@@ -75,12 +75,14 @@ class EventoUpdate(BaseModel):
     status: Optional[str] = Field(None, pattern="^(ABERTO|FECHADO|FINALIZADO)$")
     data_limite: Optional[datetime] = None
     tipo: Optional[str] = Field(None, pattern="^(NORMAL|RELAMPAGO)$")
+    pagamento_liberado: Optional[bool] = None
 
 class EventoResponse(EventoBase):
     id: int
     status: str
     data_criacao: Optional[datetime] = None
     tipo: str
+    pagamento_liberado: bool = False
 
 # Modelos de Pedido
 class ItemPedidoCreate(BaseModel):

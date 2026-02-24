@@ -30,10 +30,10 @@ TAXA_ENTREGA = 1.00
 def verificar_pagamento_disponivel(evento_id: int) -> bool:
     """
     Verifica se o pagamento está disponível para um evento.
-    Disponível quando: status FECHADO/FINALIZADO OU data_limite já passou
+    Disponível apenas quando o admin libera manualmente (pagamento_liberado = 1)
     """
     query = """
-        SELECT status, data_limite
+        SELECT pagamento_liberado
         FROM eventos
         WHERE id = :evento_id
     """
@@ -43,17 +43,7 @@ def verificar_pagamento_disponivel(evento_id: int) -> bool:
     if not result:
         return False
     
-    status_evento = result[0]
-    data_limite = result[1]
-    
-    # Pagamento disponível se evento fechado/finalizado OU se data limite passou
-    if status_evento in ['FECHADO', 'FINALIZADO']:
-        return True
-    
-    if data_limite and data_limite < datetime.now():
-        return True
-    
-    return False
+    return bool(result[0])
 
 
 def calcular_numeros_pizza(evento_id: int, usuario_id: int):
@@ -383,7 +373,7 @@ async def obter_meu_historico(
     # Single JOIN query instead of N+1 (was: 3 queries per event)
     query = """
         SELECT e.id as evento_id, e.nome, e.data_evento, e.status as evento_status, 
-               e.data_limite, e.data_criacao, e.tipo,
+               e.data_limite, e.data_criacao, e.tipo, e.pagamento_liberado,
                p.id as pedido_id, p.evento_id as p_evento_id, p.usuario_id, 
                p.valor_total, p.valor_frete, p.status as pedido_status, p.data_pedido,
                u.nome_completo, u.setor,
@@ -423,7 +413,8 @@ async def obter_meu_historico(
             status=evt["EVENTO_STATUS"],
             data_limite=evt["DATA_LIMITE"],
             data_criacao=evt.get("DATA_CRIACAO"),
-            tipo=evt.get("TIPO", "NORMAL")
+            tipo=evt.get("TIPO", "NORMAL"),
+            pagamento_liberado=bool(evt.get("PAGAMENTO_LIBERADO", 0))
         )
         
         pedido = PedidoResponse(
@@ -450,12 +441,7 @@ async def obter_meu_historico(
         )
         
         # Compute pagamento_disponivel from already-fetched data (no extra query)
-        evento_status = evt["EVENTO_STATUS"]
-        data_limite = evt["DATA_LIMITE"]
-        pagamento_disponivel = (
-            evento_status in ['FECHADO', 'FINALIZADO'] or
-            (data_limite and data_limite < datetime.now())
-        )
+        pagamento_disponivel = bool(evt.get("PAGAMENTO_LIBERADO", 0))
         
         resultado.append({
             "evento": evento_response,
@@ -497,7 +483,7 @@ async def verificar_disponibilidade_pagamento(
     
     return {
         "disponivel": disponivel,
-        "mensagem": "Pagamento disponível" if disponivel else "Aguarde o evento ser fechado para efetuar o pagamento"
+        "mensagem": "Pagamento disponível" if disponivel else "Pagamentos ainda não liberados pelo admin"
     }
 
 
@@ -514,12 +500,12 @@ async def obter_relatorio_pagamento(
     if not verificar_pagamento_disponivel(evento_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Pagamento ainda não disponível. Aguarde o evento ser fechado."
+            detail="Pagamento ainda não disponível. O admin ainda não liberou os pagamentos deste evento."
         )
     
     # Buscar evento
     evento_query = """
-        SELECT id, nome, data_evento, status, data_limite, data_criacao, tipo
+        SELECT id, nome, data_evento, status, data_limite, data_criacao, tipo, pagamento_liberado
         FROM eventos
         WHERE id = :evento_id
     """
@@ -539,7 +525,8 @@ async def obter_relatorio_pagamento(
         status=evento_result[3],
         data_limite=evento_result[4],
         data_criacao=evento_result[5],
-        tipo=evento_result[6] if len(evento_result) > 6 else "NORMAL"
+        tipo=evento_result[6] if len(evento_result) > 6 else "NORMAL",
+        pagamento_liberado=bool(evento_result[7]) if len(evento_result) > 7 else False
     )
     
     # Buscar pedido do usuário
