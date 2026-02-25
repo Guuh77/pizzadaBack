@@ -324,27 +324,28 @@ def calcular_numeros_pizza(evento_id: int, usuario_id: int):
             p["number"] = current_number
             current_number += 1
     
-    # 11b. Aplicar number_overrides (trocas de numeração do admin)
+    # 11b. Aplicar number_overrides (trocas de numeração do admin) — com prevenção de duplicatas
     if number_overrides:
         all_numbered = [p for p in sti_pizzas + sgs_pizzas if p.get("number")]
         # Build map: pizzaId -> pizza reference
         pizza_by_id = {p["id"]: p for p in all_numbered}
-        # Build map: current number -> pizza reference
-        pizza_by_number = {p["number"]: p for p in all_numbered}
         
-        # Apply overrides: swap numbers between pizzas
-        # number_overrides = { pizzaId: desiredNumber }
-        # Process as swaps: collect all (pizzaId, newNumber) pairs and apply atomically
-        swaps = []
+        # Apply overrides as proper swaps to prevent duplicates
         for pizza_id, desired_number in number_overrides.items():
-            if pizza_id in pizza_by_id:
-                swaps.append((pizza_id, desired_number))
-        
-        if swaps:
-            # Save original numbers before applying
-            original_numbers = {p["id"]: p["number"] for p in all_numbered}
-            for pizza_id, desired_number in swaps:
-                pizza_by_id[pizza_id]["number"] = desired_number
+            pizza = pizza_by_id.get(pizza_id)
+            if not pizza:
+                continue  # Pizza no longer exists, skip
+            
+            current_number = pizza.get("number")
+            if current_number == desired_number:
+                continue  # Already correct
+            
+            # Find the pizza that currently holds the desired number
+            conflicting = next((p for p in all_numbered if p["number"] == desired_number and p["id"] != pizza_id), None)
+            if conflicting:
+                # Swap: give the conflicting pizza our current number
+                conflicting["number"] = current_number
+            pizza["number"] = desired_number
     
     # 12. Mapear item_id -> números de pizza
     resultado = {}
