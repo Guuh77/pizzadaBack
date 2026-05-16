@@ -1,0 +1,16 @@
+.env
+.env.local
+.env.*.local
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+codex_tmp_deps/
+runtime_tmp_deps/
+delta_tmp_deps/
+tzfix_tmp_deps/
+dates_tmp_deps/
